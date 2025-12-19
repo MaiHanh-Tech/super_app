@@ -10,9 +10,9 @@ class AI_Core:
             genai.configure(api_key=api_key)
             
             # Khởi tạo model mặc định (Flash cho nhanh)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
             # Model mạnh hơn nếu cần (Pro)
-            self.model_pro = genai.GenerativeModel('gemini-1.5-pro')
+            self.model_pro = genai.GenerativeModel('gemini-2.5-pro')
             
         except Exception as e:
             st.error(f"Lỗi khởi tạo AI: {e}")
