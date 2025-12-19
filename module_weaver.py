@@ -185,7 +185,7 @@ def run():
         elif lang_choice == "English": st.session_state.weaver_lang = 'en'
         elif lang_choice == "中文": st.session_state.weaver_lang = 'zh'
     
-    st.header(f"🧠 {T('title')}")
+    st.header(f"🧠 {T('The Cognitive Weaver')}")
     
     # 5 TABS ĐẦY ĐỦ (Dùng hàm T để dịch tên Tab)
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
