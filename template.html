@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Translation Result</title>
+    <style>
+        /* --- CẤU HÌNH MÀU SẮC GIAO DIỆN --- */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #2c3e50;
+            --block-bg: #f8f9fa;
+            --border-color: #e9ecef;
+            
+            /* Màu chữ cho các phần dịch */
+            --color-pinyin: #d35400; /* Màu cam đậm cho Pinyin */
+            --color-english: #27ae60; /* Màu xanh lá cho Tiếng Anh */
+            --color-target: #2980b9; /* Màu xanh dương cho Tiếng Việt */
+        }
+
+        /* Chế độ tối (Dark Mode) tự động */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #0e1117;
+                --text-color: #fafafa;
+                --block-bg: #262730;
+                --border-color: #3d3d3d;
+                
+                --color-pinyin: #f39c12; /* Cam sáng */
+                --color-english: #a3e635; /* Xanh nõn chuối */
+                --color-target: #60a5fa; /* Xanh dương sáng */
+            }
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        /* Khung chứa các nút điều khiển giọng nói */
+        .speech-controls {
+            position: sticky;
+            top: 0;
+            background: var(--bg-color);
+            padding: 15px;
+            border-bottom: 2px solid var(--border-color);
+            z-index: 1000;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        select, input {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            background: var(--block-bg);
+            color: var(--text-color);
+        }
+
+        /* Khối hiển thị từng câu (Standard Mode) */
+        .sentence-part {
+            background: var(--block-bg);
+            border: 1px solid var(--border-color);
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            transition: transform 0.2s;
+        }
+        
+        .sentence-part:hover {
+            border-color: var(--color-target);
+        }
+
+        .original {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--text-color);
+        }
+
+        /* CSS MÀU SẮC CHO CÁC DÒNG DỊCH */
+        .pinyin {
+            color: var(--color-pinyin);
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+            margin-bottom: 4px;
+        }
+
+        .english {
+            color: var(--color-english);
+            font-style: italic;
+            font-size: 0.95em;
+            margin-bottom: 4px;
+            padding-left: 10px;
+            border-left: 3px solid var(--color-english);
+        }
+
+        .second-language {
+            color: var(--color-target);
+            font-weight: 600;
+            font-size: 1.1em;
+            margin-top: 5px;
+        }
+
+        /* Nút loa nhỏ */
+        .speak-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            vertical-align: middle;
+            margin-left: 8px;
+            padding: 4px;
+            border-radius: 50%;
+        }
+        .speak-button:hover { background-color: rgba(128,128,128,0.2); }
+        .speak-button svg { width: 20px; height: 20px; fill: var(--text-color); opacity: 0.7; }
+
+        /* Chế độ Interactive (Học từ) */
+        .interactive-text {
+            line-height: 2.2;
+            font-size: 1.3em;
+        }
+
+        .interactive-word {
+            display: inline-block;
+            cursor: pointer;
+            padding: 0 4px;
+            border-radius: 4px;
+            margin: 0 2px;
+            border-bottom: 1px dashed var(--color-target);
+        }
+
+        .interactive-word:hover {
+            background-color: var(--color-target);
+            color: white;
+        }
+
+        /* Tooltip khi di chuột vào từ */
+        .interactive-word[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            background: #2d3436;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: pre;
+            z-index: 999;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+        .interactive-word { position: relative; }
+    </style>
+
+    <script>
+        let synth = window.speechSynthesis;
+        let voices = [];
+
+        // Hàm lấy danh sách giọng đọc (Đã sửa để hiện tất cả)
+        function populateVoiceList() {
+            if (typeof speechSynthesis === 'undefined') return;
+
+            voices = synth.getVoices();
+            let voiceSelect = document.getElementById('voice-language');
+            voiceSelect.innerHTML = '';
+
+            // Sắp xếp ưu tiên: Anh -> Việt -> Trung -> Các giọng khác
+            voices.sort((a, b) => {
+                const p = ['EN', 'VI', 'ZH'];
+                const iA = p.findIndex(x => a.lang.toUpperCase().includes(x));
+                const iB = p.findIndex(x => b.lang.toUpperCase().includes(x));
+                
+                if (iA !== -1 && iB !== -1) return iA - iB;
+                if (iA !== -1) return -1;
+                if (iB !== -1) return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            voices.forEach(voice => {
+                let option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})`;
+                option.setAttribute('data-name', voice.name);
+                option.setAttribute('data-lang', voice.lang);
+                
+                // Mặc định chọn giọng Mỹ hoặc giọng Google
+                if (voice.name.includes('Google US English') || voice.name.includes('Zira')) {
+                    option.selected = true;
+                }
+                voiceSelect.appendChild(option);
+            });
+        }
+
+        // Đảm bảo load được giọng
+        populateVoiceList();
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = populateVoiceList;
+        }
+
+        // Hàm đọc
+        function speak(text) {
+            if (synth.speaking) synth.cancel();
+            if (!text) return;
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voiceSelect = document.getElementById('voice-language');
+            
+            // Lấy giọng đã chọn
+            if (voiceSelect.selectedOptions.length > 0) {
+                const selected = voiceSelect.selectedOptions[0];
+                const voice = voices.find(v => 
+                    v.name === selected.getAttribute('data-name') && 
+                    v.lang === selected.getAttribute('data-lang')
+                );
+                if (voice) utterance.voice = voice;
+            }
+            
+            utterance.rate = document.getElementById('voice-speed').value;
+            synth.speak(utterance);
+        }
+
+        // Hàm gọi từ nút loa (Lọc bỏ icon)
+        function speakSentence(text) {
+            speak(text.replace('🔊', '').trim());
+        }
+
+        // Load lại giọng sau 0.5s để chắc chắn trình duyệt đã tải xong
+        window.onload = function() {
+            setTimeout(populateVoiceList, 500);
+        };
+    </script>
+</head>
+
+<body>
+    <!-- Thanh điều khiển giọng đọc -->
+    <div class="speech-controls">
+        <div>
+            <label for="voice-language">🎤 Chọn Giọng:</label>
+            <select id="voice-language"><option>Đang tải giọng...</option></select>
+        </div>
+        <div>
+            <label for="voice-speed">⚡ Tốc độ:</label>
+            <input type="range" id="voice-speed" min="0.5" max="2" step="0.1" value="1">
+        </div>
+    </div>
+
+    <!-- Nơi hiển thị kết quả dịch (Python sẽ điền vào đây) -->
+    <div id="content-area">
+        {{content}}
+    </div>
+</body>
+</html>
