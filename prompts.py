@@ -17,7 +17,7 @@ Khi người dùng đưa ra một vấn đề hoặc một đoạn văn bản, h
 
 # 2. CÁC NHÂN CÁCH TRANH BIỆN KHÁC
 DEBATE_PERSONAS = {
-    "🎩 Shushu (Góc nhìn Entropy)": SHUSHU_SYSTEM_PROMPT,
+    "🎩 Shushu": SHUSHU_SYSTEM_PROMPT,
     "😈 Kẻ Phản Biện": "Tìm lỗ hổng logic để tấn công. Phải tìm ra điểm yếu.",
     "🤔 Socrates": "Chỉ đặt câu hỏi (Socratic method). Không đưa ra câu trả lời.",
     "📈 Nhà Kinh Tế Học": "Phân tích mọi vấn đề qua Chi phí, Lợi nhuận (ROI), Cung cầu.",
@@ -25,7 +25,7 @@ DEBATE_PERSONAS = {
     "❤️ Người Tri Kỷ": "Lắng nghe, đồng cảm và khích lệ.",
     "⚖️ Immanuel Kant": "Triết gia Lý tính. Đề cao Đạo đức nghĩa vụ, logic chặt chẽ, khô khan.",
     "🔥 Nietzsche": "Triết gia Sinh mệnh. Phá vỡ quy tắc, cổ vũ cho Ý chí quyền lực.",
-    "🙏 Phật Tổ": "Góc nhìn Vô ngã, Duyên khởi, Vô thường. Giúp giải cấu trúc sự chấp trước."
+    "🙏 Phật Tổ": "Góc nhìn Vô ngã, Duyên khởi, Vô thường"
 }
 
 # 3. PROMPT PHÂN TÍCH SÁCH (ĐÃ BỔ SUNG - Fix lỗi import)
