@@ -275,108 +275,251 @@ def run():
                 st.markdown(res)
                 luu_lich_su("Dịch Thuật", f"{target_lang}", txt[:50])
 
-    # === TAB 3: ĐẤU TRƯỜNG TƯ DUY (MULTI-AGENT ARENA) ===
-    with tab3:
-        st.subheader(T("t3_header"))
-        mode = st.radio("Mode:", ["👤 Solo", "⚔️ Multi-Agent"], horizontal=True, key="w_t3_mode")
+    # === TAB 3: ĐẤU TRƯỜNG TƯ DUY (ĐÃ SỬA TOÀN BỘ) ===
+with tab3:
+    st.subheader(T("t3_header"))
+    mode = st.radio("Mode:", ["👤 Solo", "⚔️ Multi-Agent"], horizontal=True, key="w_t3_mode")
+    
+    # Khởi tạo history nếu chưa có
+    if "weaver_chat" not in st.session_state: 
+        st.session_state.weaver_chat = []
+
+    # ========================================
+    # MODE 1: SOLO (USER vs AI với MEMORY)
+    # ========================================
+    if mode == "👤 Solo":
+        c1, c2 = st.columns([3, 1])
         
-        if "weaver_chat" not in st.session_state: st.session_state.weaver_chat = []
-
-        if mode == "👤 Solo":
-            c1, c2 = st.columns([3, 1])
-            with c1: persona = st.selectbox(T("t3_persona_label"), list(DEBATE_PERSONAS.keys()), key="w_t3_solo_p")
-            with c2: 
-                if st.button(T("t3_clear"), key="w_t3_clr"): 
-                    st.session_state.weaver_chat = []
-                    st.rerun()
-
-            for msg in st.session_state.weaver_chat:
-                st.chat_message(msg["role"]).write(msg["content"])
-
-            if prompt := st.chat_input(T("t3_input")):
-                st.chat_message("user").write(prompt)
-                st.session_state.weaver_chat.append({"role": "user", "content": prompt})
-                
-                with st.chat_message("assistant"):
-                    sys = DEBATE_PERSONAS[persona]
-                    with st.spinner("..."):
-                        res = ai.generate(prompt, model_type="flash", system_instruction=sys)
-                        st.write(res)
-                        st.session_state.weaver_chat.append({"role": "assistant", "content": res})
-                        luu_lich_su("Tranh Biện Solo", persona, prompt)
-        # --- PHẦN HỘI ĐỒNG TRANH BIỆN (ĐÃ SỬA) ---
-        else:
-            st.info("💡 Chọn tối đa 3 nhân vật để họ tự cãi nhau.")
-            participants = st.multiselect(
-                "Chọn Hội Đồng Tranh Biện:", 
+        with c1: 
+            persona = st.selectbox(
+                T("t3_persona_label"), 
                 list(DEBATE_PERSONAS.keys()), 
-                default=[list(DEBATE_PERSONAS.keys())[0], list(DEBATE_PERSONAS.keys())[1]],
-                key="w_t3_multi_p"
+                key="w_t3_solo_p"
             )
-            topic = st.text_input("Chủ đề tranh luận:", key="w_t3_topic")
+        
+        with c2: 
+            if st.button(T("t3_clear"), key="w_t3_clr"): 
+                st.session_state.weaver_chat = []
+                st.rerun()
+
+        # Hiển thị lịch sử chat
+        for msg in st.session_state.weaver_chat:
+            st.chat_message(msg["role"]).write(msg["content"])
+
+        # Input mới
+        if prompt := st.chat_input(T("t3_input")):
+            # Thêm user message
+            st.chat_message("user").write(prompt)
+            st.session_state.weaver_chat.append({
+                "role": "user", 
+                "content": prompt
+            })
             
-            c_start, c_del = st.columns([1, 5])
-            with c_start:
-                start_btn = st.button("🔥 KHAI CHIẾN", key="w_t3_start", disabled=(len(participants)<2))
-            with c_del:
-                if st.button("🗑️ Xóa Bàn", key="w_t3_multi_clr"):
-                    st.session_state.weaver_chat = []
-                    st.rerun()
+            # ✅ FIX 1: XÂY DỰNG CONTEXT TỪ LỊCH SỬ
+            # Lấy 5 tin nhắn gần nhất để AI hiểu ngữ cảnh
+            recent_history = st.session_state.weaver_chat[-10:]  # 10 tin nhắn cuối
+            
+            context_text = "\n".join([
+                f"{m['role'].upper()}: {m['content']}" 
+                for m in recent_history
+            ])
+            
+            # Prompt có ngữ cảnh đầy đủ
+            full_prompt = f"""
+LỊCH SỬ HỘI THOẠI:
+{context_text}
 
-            # Hiện lịch sử cũ để không bị mất khi rerun
-            for msg in st.session_state.weaver_chat:
-                if msg["role"] == "system":
-                    st.chat_message("system").write(msg["content"])
-                elif msg["role"] == "assistant":
-                    st.chat_message("assistant").write(msg["content"])
-
-            # Logic chạy vòng lặp
-            if start_btn and topic:
-                st.session_state.weaver_chat = [] # Reset
+NHIỆM VỤ: Dựa vào lịch sử trên, hãy trả lời câu hỏi mới nhất của USER.
+Nếu USER hỏi "câu hỏi cũ" hoặc "vừa rồi", hãy tham chiếu đến lịch sử để trả lời.
+            """
+            
+            with st.chat_message("assistant"):
+                sys_instruction = DEBATE_PERSONAS[persona]
                 
-                start_msg = f"📢 **CHỦ TỌA:** Bắt đầu tranh luận về: *{topic}*"
-                st.session_state.weaver_chat.append({"role": "system", "content": start_msg})
-                st.chat_message("system").write(start_msg)
-                
-                # Biến tạm để lưu log cho hàm luu_lich_su
-                full_transcript = [start_msg]
-
-                with st.status("Cuộc chiến đang diễn ra (3 vòng)...") as status:
-                    for round_num in range(1, 4):
-                        status.update(label=f"🔄 Vòng {round_num}/3...")
-                        for p_name in participants:
-                            # Xây dựng ngữ cảnh từ tin nhắn cuối cùng
-                            last_content = st.session_state.weaver_chat[-1]['content'] if st.session_state.weaver_chat else topic
-                            
-                            p_prompt = f"""
-                            VAI TRÒ: {p_name}. 
-                            CHỦ ĐỀ GỐC: {topic}.
-                            TÌNH HUỐNG: Người trước vừa nói: '{last_content}'.
-                            NHIỆM VỤ: Hãy phản biện hoặc bổ sung ý kiến ngắn gọn (dưới 100 từ).
-                            """
-                            
-                            # Gọi AI
-                            res = ai.generate(p_prompt, model_type="flash", system_instruction=DEBATE_PERSONAS[p_name])
-                            
-                            # Lưu và Hiện
-                            content_fmt = f"**{p_name}:** {res}"
-                            st.session_state.weaver_chat.append({"role": "assistant", "content": content_fmt})
-                            full_transcript.append(content_fmt)
-                            
-                            with st.chat_message("assistant"): 
-                                st.write(content_fmt)
-                            
-                            time.sleep(10) # Nghỉ để tránh Quota
-                
-                # --- ĐÃ BỔ SUNG: LƯU LỊCH SỬ ---
-                full_log = "\n\n".join(st.session_state.battle_logs)
-                luu_lich_su_vinh_vien("Hội Đồng Tranh Biện", topic, full_log)
-                st.toast("💾 Đã lưu biên bản cuộc họp vào Nhật Ký!", icon="✅")
+                with st.spinner("🤔 Đang suy nghĩ..."):
+                    # Gọi AI với context đầy đủ
+                    res = ai.generate(
+                        full_prompt, 
+                        model_type="flash", 
+                        system_instruction=sys_instruction
+                    )
+                    
+                    if res:
+                        st.write(res)
                         
-                # Hiển thị kết quả trận đấu
-                for log in st.session_state.battle_logs:
-                    st.markdown(log)
-                    st.markdown("---")
+                        # Lưu assistant response
+                        st.session_state.weaver_chat.append({
+                            "role": "assistant", 
+                            "content": res
+                        })
+                        
+                        # ✅ FIX 2: LƯU CẢ CÂU HỎI VÀ TRẢ LỜI
+                        full_content = f"""
+👤 USER: {prompt}
+
+🤖 {persona}: {res}
+                        """
+                        
+                        luu_lich_su(
+                            loai="Tranh Biện Solo",
+                            tieu_de=f"{persona} - {prompt[:50]}...",
+                            noi_dung=full_content.strip()
+                        )
+                    else:
+                        st.error("⚠️ AI không phản hồi. Vui lòng thử lại.")
+    
+    # ========================================
+    # MODE 2: MULTI-AGENT (AI vs AI)
+    # ========================================
+    else:
+        st.info("💡 Chọn 2-3 nhân vật để họ tự tranh luận.")
+        
+        participants = st.multiselect(
+            "Chọn Hội Đồng Tranh Biện:", 
+            list(DEBATE_PERSONAS.keys()), 
+            default=[list(DEBATE_PERSONAS.keys())[0], list(DEBATE_PERSONAS.keys())[1]],
+            max_selections=3,
+            key="w_t3_multi_p"
+        )
+        
+        topic = st.text_input(
+            "Chủ đề tranh luận:", 
+            placeholder="VD: Tiền có mua được hạnh phúc không?",
+            key="w_t3_topic"
+        )
+        
+        c_start, c_del = st.columns([1, 5])
+        
+        with c_start:
+            start_btn = st.button(
+                "🔥 KHAI CHIẾN", 
+                key="w_t3_start", 
+                disabled=(len(participants) < 2 or not topic),
+                type="primary"
+            )
+        
+        with c_del:
+            if st.button("🗑️ Xóa Bàn", key="w_t3_multi_clr"):
+                st.session_state.weaver_chat = []
+                st.rerun()
+
+        # Hiển thị lịch sử cũ (để không bị mất khi rerun)
+        for msg in st.session_state.weaver_chat:
+            role = msg["role"]
+            content = msg["content"]
+            
+            if role == "system":
+                st.info(content)
+            else:
+                st.chat_message("assistant").write(content)
+        
+        # ✅ FIX 3: LOGIC CHẠY VÒNG LẶP (ĐÃ SỬA HOÀN CHỈNH)
+        if start_btn and topic and len(participants) >= 2:
+            # Reset chat history
+            st.session_state.weaver_chat = []
+            
+            # Tin nhắn mở đầu
+            start_msg = f"📢 **CHỦ TỌA:** Khai mạc tranh luận về: *'{topic}'*"
+            st.session_state.weaver_chat.append({
+                "role": "system", 
+                "content": start_msg
+            })
+            st.info(start_msg)
+            
+            # Biến lưu toàn bộ transcript để lưu vào database
+            full_transcript = [start_msg]
+            
+            with st.status("🔥 Cuộc chiến đang diễn ra (3 vòng)...") as status:
+                for round_num in range(1, 4):
+                    status.update(label=f"🔄 Vòng {round_num}/3 đang diễn ra...")
+                    
+                    for i, p_name in enumerate(participants):
+                        # Lấy ngữ cảnh từ các tin nhắn trước
+                        if len(st.session_state.weaver_chat) > 1:
+                            # Lấy 3 tin nhắn gần nhất để AI hiểu đối thủ nói gì
+                            recent_context = st.session_state.weaver_chat[-3:]
+                            context_str = "\n".join([
+                                f"- {m['content']}" 
+                                for m in recent_context 
+                                if m['role'] != 'system'
+                            ])
+                        else:
+                            context_str = topic
+                        
+                        # Xây dựng prompt cho AI
+                        if round_num == 1:
+                            # Vòng 1: Đưa ra quan điểm ban đầu
+                            p_prompt = f"""
+CHỦ ĐỀ TRANH LUẬN: {topic}
+
+NHIỆM VỤ (Vòng 1 - Khai mạc): 
+Bạn là {p_name}. Hãy đưa ra quan điểm mở đầu của mình về chủ đề này.
+Nêu rõ lập trường và 2-3 lý lẽ chính (dưới 100 từ).
+                            """
+                        else:
+                            # Vòng 2-3: Phản biện đối thủ
+                            p_prompt = f"""
+CHỦ ĐỀ: {topic}
+
+TÌNH HUỐNG HIỆN TẠI:
+{context_str}
+
+NHIỆM VỤ (Vòng {round_num} - Phản biện):
+Bạn là {p_name}. Hãy:
+1. Chỉ ra điểm yếu trong lập luận của đối thủ
+2. Củng cố quan điểm của mình
+3. Đưa ra thêm 1 ví dụ minh họa
+(Dưới 100 từ, súc tích)
+                            """
+                        
+                        # Gọi AI
+                        try:
+                            res = ai.generate(
+                                p_prompt, 
+                                model_type="flash", 
+                                system_instruction=DEBATE_PERSONAS[p_name]
+                            )
+                            
+                            if res:
+                                # Format nội dung
+                                content_fmt = f"**{p_name}:** {res}"
+                                
+                                # Lưu vào session
+                                st.session_state.weaver_chat.append({
+                                    "role": "assistant", 
+                                    "content": content_fmt
+                                })
+                                
+                                # Thêm vào transcript
+                                full_transcript.append(content_fmt)
+                                
+                                # Hiển thị
+                                with st.chat_message("assistant"):
+                                    st.write(content_fmt)
+                                
+                                # Nghỉ để tránh rate limit
+                                time.sleep(6)
+                            
+                        except Exception as e:
+                            st.error(f"⚠️ Lỗi khi gọi AI cho {p_name}: {str(e)}")
+                
+                status.update(label="✅ Tranh luận kết thúc!", state="complete")
+            
+            # ✅ FIX 4: LƯU LỊCH SỬ HOÀN CHỈNH VÀO GOOGLE SHEETS
+            full_log = "\n\n".join(full_transcript)
+            
+            luu_lich_su(
+                loai="Hội Đồng Tranh Biện",
+                tieu_de=f"Chủ đề: {topic}",
+                noi_dung=full_log
+            )
+            
+            st.toast("💾 Đã lưu biên bản cuộc họp vào Nhật Ký!", icon="✅")
+            
+            # Hiển thị tóm tắt cuối
+            with st.expander("📄 Xem Toàn Bộ Biên Bản", expanded=False):
+                st.markdown(full_log)
+    
 
     # === TAB 4: PHÒNG THU AI ===
     with tab4:
