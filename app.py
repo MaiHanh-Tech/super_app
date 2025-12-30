@@ -1,4 +1,7 @@
 import streamlit as st
+import pandas as pd  # <--- EM ĐÃ BỔ SUNG DÒNG NÀY ĐỂ CHẠY ĐƯỢC ADMIN PANEL
+import json
+import re
 
 # 1. CẤU HÌNH TRANG (Bắt buộc dòng đầu tiên)
 st.set_page_config(page_title="Super AI System", layout="wide", page_icon="🏢")
@@ -60,6 +63,50 @@ with st.sidebar:
     if st.button("Đăng Xuất"):
         st.session_state.user_logged_in = False
         st.rerun()
+
+    # ✅ GIAO DIỆN QUẢN TRỊ (CHỈ HIỆN VỚI ADMIN)
+    # Code này chỉ chạy OK nếu chị đã đổi file auth_block.py sang bản Supabase
+    if st.session_state.get("is_admin"):
+        st.divider()
+        st.write("👑 **Admin Panel**")
+        
+        with st.expander("Quản lý Người dùng"):
+            # 1. Danh sách User
+            all_users = auth.get_all_users()
+            if all_users:
+                df_users = pd.DataFrame(all_users)
+                # Ẩn cột mật khẩu đi cho bảo mật, chỉ hiện các cột cần thiết
+                # Lưu ý: Cần đảm bảo các cột này có trong DB Supabase
+                display_cols = [col for col in ['username', 'role', 'is_active', 'created_at'] if col in df_users.columns]
+                st.dataframe(df_users[display_cols], hide_index=True)
+            
+            # 2. Tạo User Mới
+            st.write("➕ **Thêm User mới**")
+            new_u = st.text_input("Username:")
+            new_p = st.text_input("Password:", type="password")
+            new_role = st.selectbox("Role:", ["user", "admin"])
+            
+            if st.button("Tạo User"):
+                if new_u and new_p:
+                    ok, msg = auth.create_user(new_u, new_p, new_role)
+                    if ok: st.success(msg); st.rerun()
+                    else: st.error(msg)
+            
+            # 3. Xóa User
+            st.write("❌ **Xóa User**")
+            # Lấy danh sách username để chọn xóa
+            user_list = [u['username'] for u in all_users] if all_users else []
+            del_u = st.selectbox("Chọn User xóa:", user_list)
+            
+            if st.button("Xóa"):
+                if del_u:
+                    # Không cho phép tự xóa chính mình (nếu đang là admin)
+                    if del_u == st.session_state.current_user:
+                        st.error("Không thể tự xóa tài khoản đang đăng nhập!")
+                    else:
+                        ok, msg = auth.delete_user(del_u)
+                        if ok: st.success(msg); st.rerun()
+                        else: st.error(msg)
 
 # --- HÀM AN TOÀN (ERROR BOUNDARY) ---
 def safe_run_module(module_func, module_name):
