@@ -61,19 +61,32 @@ with st.sidebar:
         st.session_state.user_logged_in = False
         st.rerun()
 
+# --- HÀM AN TOÀN (ERROR BOUNDARY) ---
+def safe_run_module(module_func, module_name):
+    """Wrapper an toàn cho module"""
+    try:
+        module_func()
+    except Exception as e:
+        st.error(f"❌ Module {module_name} gặp lỗi:")
+        st.exception(e)
+        st.info("💡 Hãy reload trang hoặc chọn module khác")
+
 # 5. ĐIỀU HƯỚNG (GỌI CÁC FILE CON)
 try:
     if app_choice == "💰 1. Cognitive Weaver (Sách & Graph)":
         import module_weaver
-        module_weaver.run()
+        # ✅ Dùng wrapper an toàn
+        safe_run_module(module_weaver.run, "Cognitive Weaver")
          
     elif app_choice == "🌏 2. AI Translator (Dịch thuật)":
         import module_translator
-        module_translator.run()
+        # ✅ Dùng wrapper an toàn
+        safe_run_module(module_translator.run, "AI Translator")
         
     elif app_choice == "🧠 3. CFO Controller (Tài chính)":
         import module_cfo
-        module_cfo.run()
+        # ✅ Dùng wrapper an toàn
+        safe_run_module(module_cfo.run, "CFO Controller")
         
 except ImportError as e:
     st.error(f"⚠️ Lỗi: Không tìm thấy file module tương ứng!\nChi tiết: {e}")
