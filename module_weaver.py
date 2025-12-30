@@ -13,7 +13,7 @@ from datetime import datetime
 import json
 import re
 
-# ✅ THAY ĐỔI 1: IMPORT SUPABASE (Bỏ gspread, oauth2client)
+# ✅ IMPORT SUPABASE
 try:
     from supabase import create_client, Client
 except ImportError:
@@ -31,17 +31,15 @@ has_db = False
 supabase = None
 
 try:
-    # Lấy thông tin từ secrets.toml
     SUPA_URL = st.secrets["supabase"]["url"]
     SUPA_KEY = st.secrets["supabase"]["key"]
     supabase: Client = create_client(SUPA_URL, SUPA_KEY)
     has_db = True
 except Exception:
-    # Nếu chưa cấu hình thì thôi, không báo lỗi đỏ
     has_db = False
 
 # ==========================================
-# 🌍 BỘ TỪ ĐIỂN ĐA NGÔN NGỮ (GIỮ NGUYÊN)
+# 🌍 BỘ TỪ ĐIỂN ĐA NGÔN NGỮ
 # ==========================================
 TRANS = {
     "vi": {
@@ -144,19 +142,15 @@ def T(key):
     lang = st.session_state.get('weaver_lang', 'vi')
     return TRANS.get(lang, TRANS['vi']).get(key, key)
 
-# --- CÁC HÀM PHỤ TRỢ (GIỮ NGUYÊN) ---
+# --- CÁC HÀM PHỤ TRỢ ---
 @st.cache_resource
 def load_models():
-    """Chỉ load khi thực sự cần, và giới hạn 1 instance"""
+    """Chỉ load khi thực sự cần"""
     try:
-        model = SentenceTransformer(
-            "paraphrase-multilingual-MiniLM-L12-v2",
-            device='cpu'  # ← BẮT BUỘC dùng CPU trên Streamlit Cloud
-        )
+        model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device='cpu')
         model.max_seq_length = 128
         return model
-    except Exception as e:
-        return None
+    except Exception as e: return None
 
 def check_model_available():
     model = load_models()
@@ -180,16 +174,16 @@ def doc_file(uploaded_file):
     except: return ""
     return ""
 
-# ✅ THAY ĐỔI 2: HÀM LƯU/TẢI LOG DÙNG SUPABASE
-# Hàm này tự động map dữ liệu Supabase về format cũ (Time, Title...) để giao diện không bị lỗi
+# ==========================================
+# ✅ CÁC HÀM TƯƠNG TÁC DATABASE (SUPABASE)
+# ==========================================
 
 def luu_lich_su(loai, tieu_de, noi_dung):
-    """Lưu log vào Supabase (Bảng history_logs)"""
+    """Lưu log vào Supabase (History_Logs)"""
     if not has_db: return
     
     user = st.session_state.get("current_user", "Unknown")
     
-    # Data chuẩn theo cột trong Supabase (chữ thường)
     data = {
         "type": loai,
         "title": tieu_de,
@@ -200,9 +194,14 @@ def luu_lich_su(loai, tieu_de, noi_dung):
     }
     
     try:
-        supabase.table("history_logs").insert(data).execute()
+        # Dùng tên bảng 'History_Logs' như trong ảnh chị gửi
+        supabase.table("History_Logs").insert(data).execute()
     except Exception as e:
-        print(f"Lỗi lưu log: {e}")
+        # Fallback thử tên bảng chữ thường nếu lỗi
+        try:
+            supabase.table("history_logs").insert(data).execute()
+        except:
+            print(f"Lỗi lưu log: {e}")
 
 def tai_lich_su():
     """Tải log từ Supabase và đổi tên cột cho khớp code cũ"""
@@ -210,65 +209,63 @@ def tai_lich_su():
     
     try:
         # Lấy 50 dòng mới nhất
-        response = supabase.table("history_logs").select("*").order("created_at", desc=True).limit(50).execute()
+        try:
+            response = supabase.table("History_Logs").select("*").order("created_at", desc=True).limit(50).execute()
+        except:
+            response = supabase.table("history_logs").select("*").order("created_at", desc=True).limit(50).execute()
+            
         raw_data = response.data
-        print("Dữ liệu tải về:", response.data) 
         
-        # ✅ CHUYỂN ĐỔI FORMAT (Mapping)
         formatted_data = []
         for item in raw_data:
-            # Xử lý thời gian cho đẹp (bỏ chữ T và phần mili giây)
-            t = item.get("created_at", "").replace("T", " ")[:19]
-            
+            # Hàm lấy value bất kể key hoa/thường
+            def get_val(itm, keys, default=""):
+                for k in keys:
+                    if k in itm and itm[k] is not None: return itm[k]
+                return default
+
+            # Xử lý thời gian
+            raw_time = get_val(item, ["created_at", "Time", "time"])
+            clean_time = str(raw_time).replace("T", " ")[:19]
+
             formatted_data.append({
-                "Time": t,                          # Map created_at -> Time
-                "Type": item.get("type"),           # Map type -> Type
-                "Title": item.get("title"),         # Map title -> Title
-                "Content": item.get("content"),     # Map content -> Content
-                "User": item.get("user_name"),      # Map user_name -> User
-                "SentimentScore": item.get("sentiment_score", 0.0),
-                "SentimentLabel": item.get("sentiment_label", "Neutral")
+                "Time": clean_time,
+                "Type": get_val(item, ["type", "Type"]),
+                "Title": get_val(item, ["title", "Title"]),
+                "Content": get_val(item, ["content", "Content"]),
+                "User": get_val(item, ["user_name", "User", "user"]),
+                "SentimentScore": get_val(item, ["sentiment_score", "SentimentScore"], 0.0),
+                "SentimentLabel": get_val(item, ["sentiment_label", "SentimentLabel"], "Neutral")
             })
             
         return formatted_data
     except Exception as e:
         return []
 
-# --- HÀM CHÍNH: RUN() (GIỮ NGUYÊN) ---
+# --- HÀM CHÍNH: RUN() ---
 def run():
-    # 1. Khởi tạo các Block
     ai = AI_Core()
     voice = Voice_Engine()
     
-    # 2. Sidebar chọn ngôn ngữ cho Module này
     with st.sidebar:
         st.markdown("---")
-        lang_choice = st.selectbox(
-            "🌐 " + TRANS['vi']['lang_select'],
-            ["Tiếng Việt", "English", "中文"],
-            index=0,
-            key="weaver_lang_selector"
-        )
+        lang_choice = st.selectbox("🌐 " + TRANS['vi']['lang_select'], ["Tiếng Việt", "English", "中文"], key="weaver_lang_selector")
         if lang_choice == "Tiếng Việt": st.session_state.weaver_lang = 'vi'
         elif lang_choice == "English": st.session_state.weaver_lang = 'en'
         elif lang_choice == "中文": st.session_state.weaver_lang = 'zh'
     
     st.header(f"🧠 The Cognitive Weaver")
     
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        T("tab1"), T("tab2"), T("tab3"), T("tab4"), T("tab5")
-    ])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([T("tab1"), T("tab2"), T("tab3"), T("tab4"), T("tab5")])
 
     # === TAB 1: RAG & GRAPH ===
     with tab1:
         st.subheader(T("t1_header"))
-        
         c1, c2, c3 = st.columns([1, 1, 1])
         with c1: file_excel = st.file_uploader(T("t1_up_excel"), type="xlsx", key="w_t1_ex")
         with c2: uploaded_files = st.file_uploader(T("t1_up_doc"), type=["pdf", "docx", "txt"], accept_multiple_files=True, key="w_t1_doc")
         with c3: 
-            st.write("")
-            st.write("")
+            st.write(""); st.write("")
             btn_run = st.button(T("t1_btn"), type="primary", use_container_width=True)
 
         if btn_run and uploaded_files:
@@ -294,7 +291,7 @@ def run():
                 
                 text = doc_file(f)
                 link = ""
-                if has_db_rag:
+                if has_db_rag and vec:
                     q = vec.encode([text[:2000]])
                     sc = cosine_similarity(q, db)[0]
                     idx_sim = np.argsort(sc)[::-1][:3]
@@ -311,31 +308,21 @@ def run():
                     luu_lich_su("Phân Tích Sách", f.name, res[:200])
                 
                 progress_bar.progress((file_idx+1) / total_files)
-            
             status_text.text("✅ Hoàn thành!")
 
-        # VẼ GRAPH (AGRAPH)
         if file_excel:
             try:
                 with st.expander(T("t1_graph_title"), expanded=False):
                     vec = load_models()
-                    if "book_embs" not in st.session_state:
-                         st.session_state.book_embs = vec.encode(df["Tên sách"].tolist())
-                    
+                    if "book_embs" not in st.session_state: st.session_state.book_embs = vec.encode(df["Tên sách"].tolist())
                     embs = st.session_state.book_embs
                     sim = cosine_similarity(embs)
-                    nodes, edges = [], []
-                    
-                    max_nodes = st.slider("Max Nodes:", 5, len(df), min(50, len(df)))
-                    threshold = st.slider("Threshold:", 0.0, 1.0, 0.45)
-
+                    nodes, edges = []; max_nodes = st.slider("Max Nodes:", 5, len(df), min(50, len(df))); threshold = st.slider("Threshold:", 0.0, 1.0, 0.45)
                     for i in range(max_nodes):
                         nodes.append(Node(id=str(i), label=df.iloc[i]["Tên sách"], size=20, color="#FFD166"))
                         for j in range(i+1, max_nodes):
                             if sim[i,j]>threshold: edges.append(Edge(source=str(i), target=str(j), color="#118AB2"))
-                    
-                    config = Config(width=900, height=600, directed=False, physics=True, collapsible=False)
-                    agraph(nodes, edges, config)
+                    agraph(nodes, edges, Config(width=900, height=600, directed=False, physics=True, collapsible=False))
             except: pass
 
     # === TAB 2: DỊCH GIẢ ===
@@ -345,7 +332,6 @@ def run():
         c_l, c_s, c_b = st.columns([1,1,1])
         with c_l: target_lang = st.selectbox(T("t2_target"), ["Tiếng Việt", "English", "Chinese", "French", "Japanese"], key="w_t2_lang")
         with c_s: style = st.selectbox(T("t2_style"), ["Default", "Academic", "Literary", "Business"], key="w_t2_style")
-        
         if st.button(T("t2_btn"), key="w_t2_btn") and txt:
             with st.spinner("AI Translating..."):
                 p = f"Translate to {target_lang}. Style: {style}. Text: {txt}"
@@ -353,59 +339,46 @@ def run():
                 st.markdown(res)
                 luu_lich_su("Dịch Thuật", f"{target_lang}", txt[:50])
 
-    # === TAB 3: ĐẤU TRƯỜNG TƯ DUY ===
+    # === TAB 3: ĐẤU TRƯỜNG ===
     with tab3:
         st.subheader(T("t3_header"))
         mode = st.radio("Mode:", ["👤 Solo", "⚔️ Multi-Agent"], horizontal=True, key="w_t3_mode")
-        
-        if "weaver_chat" not in st.session_state: 
-            st.session_state.weaver_chat = []
+        if "weaver_chat" not in st.session_state: st.session_state.weaver_chat = []
 
         if mode == "👤 Solo":
             c1, c2 = st.columns([3, 1])
-            with c1: 
-                persona = st.selectbox(T("t3_persona_label"), list(DEBATE_PERSONAS.keys()), key="w_t3_solo_p")
+            with c1: persona = st.selectbox(T("t3_persona_label"), list(DEBATE_PERSONAS.keys()), key="w_t3_solo_p")
             with c2: 
                 if st.button(T("t3_clear"), key="w_t3_clr"): st.session_state.weaver_chat = []; st.rerun()
-
             for msg in st.session_state.weaver_chat: st.chat_message(msg["role"]).write(msg["content"])
-
             if prompt := st.chat_input(T("t3_input")):
                 st.chat_message("user").write(prompt)
                 st.session_state.weaver_chat.append({"role": "user", "content": prompt})
                 recent_history = st.session_state.weaver_chat[-10:]
                 context_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent_history])
                 full_prompt = f"LỊCH SỬ:\n{context_text}\n\nNHIỆM VỤ: Trả lời câu hỏi mới nhất của USER."
-                
                 with st.chat_message("assistant"):
-                    with st.spinner("🤔..."):
+                    with st.spinner("..."):
                         res = ai.generate(full_prompt, model_type="flash", system_instruction=DEBATE_PERSONAS[persona])
                         if res:
                             st.write(res)
                             st.session_state.weaver_chat.append({"role": "assistant", "content": res})
                             luu_lich_su("Tranh Biện Solo", f"{persona} - {prompt[:50]}...", f"Q: {prompt}\nA: {res}")
-                        else: st.error("⚠️ AI Error.")
         else:
-            # Multi-Agent
-            st.info("💡 Chọn 2-3 nhân vật.")
             participants = st.multiselect("Chọn Hội Đồng:", list(DEBATE_PERSONAS.keys()), default=[list(DEBATE_PERSONAS.keys())[0], list(DEBATE_PERSONAS.keys())[1]], max_selections=3)
             topic = st.text_input("Chủ đề:", key="w_t3_topic")
-            
             if st.button("🔥 KHAI CHIẾN", disabled=(len(participants)<2 or not topic)):
                 st.session_state.weaver_chat = []
                 start_msg = f"📢 **CHỦ TỌA:** Khai mạc tranh luận về: *'{topic}'*"
                 st.session_state.weaver_chat.append({"role": "system", "content": start_msg})
-                st.info(start_msg)
                 full_transcript = [start_msg]
-                MAX_DEBATE_TIME = 90; start_time = time.time()
-                
-                with st.status("🔥 Đang diễn ra...") as status:
+                MAX_TIME = 90; start_time = time.time()
+                with st.status("🔥 Cuộc chiến đang diễn ra...") as status:
                     for round_num in range(1, 4):
-                        if time.time() - start_time > MAX_DEBATE_TIME: break
-                        status.update(label=f"🔄 Vòng {round_num}...")
+                        if time.time() - start_time > MAX_TIME: break
                         for p_name in participants:
-                            if time.time() - start_time > MAX_DEBATE_TIME: break
-                            context_str = topic if len(st.session_state.weaver_chat) <= 1 else "\n".join([f"- {m['content']}" for m in st.session_state.weaver_chat[-3:] if m['role'] != 'system'])
+                            if time.time() - start_time > MAX_TIME: break
+                            context_str = "\n".join([f"- {m['content']}" for m in st.session_state.weaver_chat[-3:] if m['role'] != 'system'])
                             p_prompt = f"CHỦ ĐỀ: {topic}\nBỐI CẢNH:\n{context_str}\n\nNHIỆM VỤ (Vòng {round_num}): Phản biện."
                             try:
                                 res = ai.generate(p_prompt, model_type="flash", system_instruction=DEBATE_PERSONAS[p_name])
@@ -416,32 +389,29 @@ def run():
                                     st.chat_message("assistant").write(fmt)
                                     time.sleep(2)
                             except: continue
-                    status.update(label="✅ Kết thúc!", state="complete")
+                    status.update(label="Kết thúc!", state="complete")
                 luu_lich_su("Hội Đồng Tranh Biện", topic, "\n".join(full_transcript))
 
-    # === TAB 4: PHÒNG THU AI ===
+    # === TAB 4: PHÒNG THU ===
     with tab4:
         st.subheader(T("t4_header"))
-        inp_v = st.text_area("Text:", height=200, key="w_t4_input")
-        btn_v = st.button(T("t4_btn"), key="w_t4_btn")
+        inp_v = st.text_area("Text:", height=200); btn_v = st.button(T("t4_btn"))
         if btn_v and inp_v:
             path = voice.speak(inp_v)
             if path: st.audio(path)
 
-    # === TAB 5: NHẬT KÝ (DATA TỪ SUPABASE) ===
+    # === TAB 5: NHẬT KÝ (CÓ PHẦN BAYES) ===
     with tab5:
         st.subheader("⏳ Nhật Ký & Phản Chiếu Tư Duy")
         if st.button("🔄 Tải lại", key="w_t5_refresh"):
             st.session_state.history_cloud = tai_lich_su()
             st.rerun()
         
-        # Lấy dữ liệu (đã được hàm tai_lich_su chuyển đổi về format cũ)
         data = st.session_state.get("history_cloud", tai_lich_su())
         
         if data:
             df_h = pd.DataFrame(data)
             
-            # --- BIỂU ĐỒ (Dùng tên cột cũ: Time, SentimentScore...) ---
             if "SentimentScore" in df_h.columns:
                 try:
                     df_h["score"] = pd.to_numeric(df_h["SentimentScore"], errors='coerce').fillna(0)
@@ -449,9 +419,38 @@ def run():
                     st.plotly_chart(fig, use_container_width=True)
                 except: pass
 
+            # ✅ ĐÃ PHỤC HỒI PHẦN BAYES (THE JAYNESIAN ANALYZER)
+            with st.expander("🔮 Phân tích Tư duy theo xác suất Bayes (E.T. Jaynes)", expanded=False):
+                st.info("AI sẽ coi Lịch sử hoạt động của chị là 'Dữ liệu quan sát' (Evidence) để suy luận ra 'Hàm mục tiêu' (Objective Function) và sự dịch chuyển niềm tin của chị.")
+                
+                if st.button("🧠 Chạy Mô hình Bayes ngay"):
+                    with st.spinner("Đang tính toán xác suất hậu nghiệm (Posterior)..."):
+                        # Lấy 10 hoạt động gần nhất làm dữ liệu mẫu
+                        recent_logs = df_h.tail(10).to_dict(orient="records")
+                        logs_text = json.dumps(recent_logs, ensure_ascii=False)
+                        
+                        bayes_prompt = f"""
+                        Đóng vai một nhà khoa học tư duy theo trường phái E.T. Jaynes (sách 'Probability Theory: The Logic of Science').
+                        
+                        DỮ LIỆU QUAN SÁT (EVIDENCE):
+                        Đây là nhật ký hoạt động của tôi:
+                        {logs_text}
+                        
+                        NHIỆM VỤ:
+                        Hãy phân tích chuỗi hành động này như một bài toán suy luận Bayes.
+                        1. **Xác định Priors (Niềm tin tiên nghiệm):** Dựa trên các hành động đầu, tôi đang quan tâm/tin tưởng điều gì?
+                        2. **Cập nhật Likelihood (Khả năng):** Các hành động tiếp theo củng cố hay làm yếu đi niềm tin đó?
+                        3. **Kết luận Posterior (Hậu nghiệm):** Trạng thái tư duy hiện tại của tôi đang hội tụ về đâu? Có mâu thuẫn (Inconsistency) nào trong logic hành động không?
+                        
+                        Trả lời ngắn gọn, sâu sắc, dùng thuật ngữ xác suất nhưng dễ hiểu.
+                        """
+                        
+                        # Gọi AI Core (Dùng Pro để suy luận sâu)
+                        analysis = ai.generate(bayes_prompt, model_type="pro")
+                        st.markdown(analysis)
+
             st.divider()
-            for index, item in df_h.iloc[::-1].iterrows(): # Đảo ngược để xem mới nhất
-                # Dùng tên cột cũ để hiển thị
+            for index, item in df_h.iterrows():
                 t = str(item.get('Time', ''))
                 tp = str(item.get('Type', ''))
                 ti = str(item.get('Title', ''))
