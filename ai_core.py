@@ -26,59 +26,66 @@ class AI_Core:
         ]
 
     def generate(self, prompt, model_type="flash", system_instruction=None):
-        """
-        Chiến thuật 'Không lùi bước': 
-        Thử Pro -> Lỗi -> Thử Flash -> Lỗi -> Thử Exp -> Lỗi -> Chờ 10s -> Thử lại Flash
-        """
-        
-        # 1. Xây dựng Prompt
-        full_prompt = prompt
-        if system_instruction:
-            full_prompt = f"SYSTEM INSTRUCTION:\n{system_instruction}\n\nUSER REQUEST:\n{prompt}"
+    """
+    Chiến thuật tối ưu: Flash → Pro → Exp (chỉ khi thực sự cần)
+    Không retry cùng model liên tiếp trong vòng 10s
+    """
+    
+    # 1. Xây dựng Prompt
+    full_prompt = prompt
+    if system_instruction:
+        full_prompt = f"SYSTEM INSTRUCTION:\n{system_instruction}\n\nUSER REQUEST:\n{prompt}"
 
-        # 2. Lên kế hoạch tác chiến (Danh sách model sẽ thử theo thứ tự)
-        # Cấu trúc: (Model_Object, Tên_Model, Thời_gian_chờ_nếu_lỗi)
-        if model_type == "pro":
-            plan = [
-                (self.pro, "Pro", 2),       # Thử Pro trước
-                (self.flash, "Flash", 5),   # Lỗi thì sang Flash ngay
-                (self.exp, "Exp", 5),       # Lỗi nữa thì sang bản 2.0 Exp
-                (self.flash, "Flash Retry", 10) # Cùng đường thì quay lại Flash chờ 10s
-            ]
-        else:
-            plan = [
-                (self.flash, "Flash", 2),
-                (self.exp, "Exp", 5),
-                (self.pro, "Pro", 5),       # Flash lỗi thì thử sang Pro cầu may
-                (self.flash, "Flash Retry", 10)
-            ]
+    # 2. Chiến lược model dựa trên độ phức tạp
+    if model_type == "pro":
+        # Với task phức tạp: Pro → Flash (fallback) → Exp
+        plan = [
+            (self.pro, "Pro", 3),
+            (self.flash, "Flash", 5),
+            (self.exp, "Exp", 8)
+        ]
+    else:
+        # Với task thường: Flash → Exp → Pro (cuối cùng mới dùng Pro tốn tiền)
+        plan = [
+            (self.flash, "Flash", 2),
+            (self.exp, "Exp", 5),
+            (self.pro, "Pro", 10)
+        ]
 
-        # 3. Thực thi kế hoạch
-        last_error = ""
-        for model, name, wait_time in plan:
-            try:
-                # Nếu model chưa khởi tạo được thì bỏ qua
-                if not model: continue
+    # 3. Thực thi với tracking lỗi
+    last_errors = []
+    
+    for model, name, wait_time in plan:
+        try:
+            if not model: 
+                continue
+            
+            response = model.generate_content(
+                full_prompt, 
+                safety_settings=self._get_safety()
+            )
+            
+            if response.text:
+                return response.text
                 
-                response = model.generate_content(
-                    full_prompt, 
-                    safety_settings=self._get_safety()
-                )
+        except ResourceExhausted as e:
+            error_msg = f"{name}: Quota exhausted"
+            last_errors.append(error_msg)
+            time.sleep(wait_time)
+            
+        except (ServiceUnavailable, InternalServerError) as e:
+            error_msg = f"{name}: Service error"
+            last_errors.append(error_msg)
+            time.sleep(wait_time * 0.5)  # Chờ ngắn hơn cho lỗi tạm thời
+            
+        except Exception as e:
+            error_msg = f"{name}: {str(e)[:100]}"
+            last_errors.append(error_msg)
+            time.sleep(1)
                 
-                if response.text:
-                    return response.text
-                    
-            except ResourceExhausted:
-                # st.warning(f"⚠️ Model {name} bận, đang chuyển kênh...") # (Có thể bỏ comment để debug)
-                time.sleep(wait_time)
-                last_error = "Hết Quota (ResourceExhausted)"
-            except Exception as e:
-                time.sleep(1)
-                last_error = str(e)
-                
-        # Nếu thử hết cách mà vẫn chết
-        return f"⚠️ Hệ thống đang quá tải thực sự (Google chặn tạm thời). Lỗi cuối cùng: {last_error}"
-
+    # Nếu tất cả đều fail
+    return f"⚠️ Hệ thống quá tải:\n" + "\n".join(f"- {e}" for e in last_errors[-3:])
+    
     @st.cache_data(ttl=3600)
     def analyze_static(_self, text, instruction):
         """Hàm dùng cho RAG - Có Cache"""
