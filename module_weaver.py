@@ -231,6 +231,11 @@ def run():
             btn_run = st.button(T("t1_btn"), type="primary", use_container_width=True)
 
         if btn_run and uploaded_files:
+            # ✅ THÊM: Progress Bar & Status
+            total_files = len(uploaded_files)
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
             vec = load_models()
             db, df = None, None
             has_db = False
@@ -243,14 +248,21 @@ def run():
                     st.success(T("t1_connect_ok").format(n=len(df)))
                 except: st.error("Lỗi đọc Excel.")
 
-            for f in uploaded_files:
+            # ✅ THÊM: Dùng enumerate để theo dõi tiến độ
+            for file_idx, f in enumerate(uploaded_files):
+                # Update status
+                status_text.text(f"Đang xử lý file {file_idx+1}/{total_files}: {f.name}")
+                progress_bar.progress((file_idx) / total_files)
+                
+                # Logic xử lý file cũ
                 text = doc_file(f)
                 link = ""
                 if has_db:
                     q = vec.encode([text[:2000]])
                     sc = cosine_similarity(q, db)[0]
-                    idx = np.argsort(sc)[::-1][:3]
-                    for i in idx:
+                    # Lưu ý: Đổi tên biến idx thành idx_sim để tránh trùng
+                    idx_sim = np.argsort(sc)[::-1][:3]
+                    for i in idx_sim:
                         if sc[i] > 0.35: link += f"- {df.iloc[i]['Tên sách']} ({sc[i]*100:.0f}%)\n"
 
                 with st.spinner(T("t1_analyzing").format(name=f.name)):
@@ -261,6 +273,11 @@ def run():
                     st.markdown(res)
                     st.markdown("---")
                     luu_lich_su("Phân Tích Sách", f.name, res[:200])
+                
+                # Update progress sau khi xong 1 file
+                progress_bar.progress((file_idx+1) / total_files)
+            
+            status_text.text("✅ Hoàn thành!")
 
         # VẼ GRAPH (AGRAPH)
         if file_excel:
