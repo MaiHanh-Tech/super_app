@@ -24,9 +24,21 @@ def clean_pdf_text(text):
     text = text.replace('•', 'ï').replace('impor tant', 'important').replace('scienti c', 'scientific')
     return text.strip()
 
-def split_smart_chunks(text, chunk_size=1500):
-    """Chia văn bản thành chunks lớn"""
-    if not text: return []
+# ✅ HÀM ĐÃ SỬA THEO YÊU CẦU
+def split_smart_chunks(text, chunk_size=1500, max_total_chars=50000):
+    """
+    Chia văn bản thành chunks lớn
+    ✅ THÊM: Giới hạn tổng số ký tự để tránh crash
+    """
+    if not text: 
+        return []
+    
+    # ✅ CẮT BỎ PHẦN DƯ THỪA
+    if len(text) > max_total_chars:
+        text = text[:max_total_chars]
+        st.warning(f"⚠️ File quá dài. Chỉ dịch {max_total_chars:,} ký tự đầu.")
+    
+    # Logic chia chunks cũ (GIỮ NGUYÊN)
     sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z"\'(])', text)
     chunks = []
     current_chunk = ""
