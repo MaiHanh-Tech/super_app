@@ -27,7 +27,7 @@ class AI_Core:
             # Cấu hình Generation Config (Tối ưu cho 2.5 Pro)
             self.gen_config = genai.GenerationConfig(
                 temperature=0.8,
-                max_output_tokens= 1000,  
+                max_output_tokens= 500,  
                 top_p=0.95,
                 top_k=40
             )
