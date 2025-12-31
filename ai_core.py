@@ -24,10 +24,10 @@ class AI_Core:
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             ]
             
-            # Cấu hình Generation Config (Tối ưu cho 3.0 Pro)
+            # Cấu hình Generation Config (Tối ưu cho 2.5 Pro)
             self.gen_config = genai.GenerationConfig(
                 temperature=0.8,
-                max_output_tokens=32768,  # Output dài thoải mái
+                max_output_tokens= 1000,  
                 top_p=0.95,
                 top_k=40
             )
@@ -41,7 +41,7 @@ class AI_Core:
         valid_names = {
             "flash": "gemini-2.5-flash",         # Nhanh, rẻ
             "pro": "gemini-2.5-pro",             # Thông minh nhất (Dùng cho tranh biện)
-            "exp": "gemini-2.5-flash-exp"        # Bản thử nghiệm
+            "exp": "gemini-2.5-flash-lite"        # Bản thử nghiệm
         }
         
         # Mặc định fallback về 2.5 Flash nếu tên sai
@@ -67,17 +67,17 @@ class AI_Core:
 
         # ✅ CHIẾN THUẬT ƯU TIÊN: Pro -> Flash -> Exp
         if model_type == "pro":
-            # Với task khó (Tranh biện): Ưu tiên 3.0 Pro
+            # Với task khó (Tranh biện): Ưu tiên 2.5 Pro
             plan = [
                 ("pro", "Gemini 2.5 pro", 6), 
                 ("flash", "Gemini 2.5 Flash", 3), 
-                ("exp", "Gemini 2.5 Flash exp", 3)
+                ("exp", "gemini-2.5-flash-lite", 3)
             ]
         else:
             # Với task thường: Ưu tiên Flash cho nhanh
             plan = [
                 ("flash", "Gemini 2.5 Flash", 2), 
-                ("exp", "Gemini 2.5 Flash exp", 2),
+                ("exp", "gemini-2.5-flash-lite", 2),
                 ("pro", "Gemini 2.5 Pro", 6)
             ]
 
