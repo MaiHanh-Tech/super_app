@@ -179,7 +179,7 @@ def doc_file(uploaded_file):
 # ==========================================
 
 def luu_lich_su(loai, tieu_de, noi_dung):
-    """Lưu log vào Supabase (History_Logs)"""
+    """Lưu log vào Supabase (history_logsg"""
     if not has_db: return
     
     user = st.session_state.get("current_user", "Unknown")
@@ -194,8 +194,7 @@ def luu_lich_su(loai, tieu_de, noi_dung):
     }
     
     try:
-        # Dùng tên bảng 'History_Logs' như trong ảnh chị gửi
-        supabase.table("History_Logs").insert(data).execute()
+        supabase.table("history_logs").insert(data).execute()
     except Exception as e:
         # Fallback thử tên bảng chữ thường nếu lỗi
         try:
@@ -221,8 +220,7 @@ def tai_lich_su():
             # Hàm lấy value bất kể key hoa/thường
             def get_val(itm, keys, default=""):
                 for k in keys:
-                    if k in itm and itm[k] is not None: return itm[k]
-                return default
+                    if k in itm and itm[k] is not None: return itminitm and itm[k] is not N default
 
             # Xử lý thời gian
             raw_time = get_val(item, ["created_at", "Time", "time"])
