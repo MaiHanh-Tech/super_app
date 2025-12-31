@@ -259,17 +259,14 @@ def run():
     tab1, tab2, tab3, tab4, tab5 = st.tabs([T("tab1"), T("tab2"), T("tab3"), T("tab4"), T("tab5")])
 
     # === TAB 1: RAG & GRAPH ===
+    # TAB 1: RAG
     with tab1:
-        st.subheader(T("t1_header"))
-        c1, c2, c3 = st.columns([1, 1, 1])
-        with c1: file_excel = st.file_uploader(T("t1_up_excel"), type="xlsx", key="w_t1_ex")
-        
-        # ✅ FIX: THÊM 'md', 'html' VÀO DANH SÁCH CHO PHÉP UPLOAD
-        with c2: uploaded_files = st.file_uploader(T("t1_up_doc"), type=["pdf", "docx", "txt", "md", "html"], accept_multiple_files=True, key="w_t1_doc")
-        
-        with c3: 
-            st.write(""); st.write("")
-            btn_run = st.button(T("t1_btn"), type="primary", use_container_width=True)
+        st.header(T("t1_header"))
+        with st.container():
+            c1, c2, c3 = st.columns([1, 1, 1])
+            with c1: file_excel = st.file_uploader(T("t1_up_excel"), type="xlsx", key="t1")
+            with c2: uploaded_files = st.file_uploader(T("t1_up_doc"), type=["pdf", "docx", "txt", "md", "html"], accept_multiple_files=True)
+            with c3: st.write(""); st.write(""); btn_run = st.button(T("t1_btn"), type="primary", use_container_width=True)
 
         if btn_run and uploaded_files:
             total_files = len(uploaded_files)
